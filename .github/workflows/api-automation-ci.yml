@@ -1,0 +1,148 @@
+name: API Automation CI
+
+on:
+  workflow_dispatch: {}
+  schedule:
+    # Runs every day at 11:00 AM Nepal time (Asia/Kathmandu = UTC+5:45)
+    # GitHub Actions cron is in UTC, so 11:00 NPT = 05:15 UTC
+    - cron: "15 5 * * *"
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: api-automation-ci
+  cancel-in-progress: false
+
+jobs:
+  api-tests-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install Newman + HTML Extra Reporter
+        run: npm install -g newman newman-reporter-htmlextra
+
+      - name: Run API Tests
+        id: newman
+        run: |
+          mkdir -p newman
+          newman run hotstone-app-apis.postman_collection.json \
+            -e environment.json \
+            -r cli,htmlextra \
+            --reporter-htmlextra-export newman/report.html \
+            --reporter-htmlextra-title "Hotstone API Automation Report"
+
+      - name: Upload Test Report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-test-report
+          path: newman/report.html
+
+      # Prepare a tiny static site for Vercel
+      # Always runs, even if tests fail
+      - name: Prepare HTML for Vercel
+        if: always()
+        run: |
+          mkdir -p vercel-site
+          if [ -f newman/report.html ]; then
+            cp newman/report.html vercel-site/index.html
+          else
+            echo "<html><body><h1>No report generated</h1><p>Newman failed before creating report.html.</p></body></html>" > vercel-site/index.html
+          fi
+
+      # Optional: comment on PR with workflow run link
+      - name: Comment report link on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const status = '${{ steps.newman.outcome }}';
+            const runUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+
+            const body = [
+              '### 🔎 API Automation (Newman) Report',
+              '',
+              `**Status:** **${status.toUpperCase()}**`,
+              '',
+              '📦 The full HTML report is available in the **Artifacts** of this workflow run:',
+              runUrl,
+            ].join('\n');
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body,
+            });
+
+      # Deploy the HTML report to Vercel on push to main,
+      # even if tests FAILED
+      - name: Deploy to Vercel
+        id: vercel
+        if: always() && github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: amondnet/vercel-action@v25
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}       # Required
+          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}     # Required
+          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }} # Required
+          vercel-args: --prod                             # Deploy as production
+          working-directory: ./vercel-site                # Deploy the generated site
+
+      # 🔔 Send Discord notification for ALL events (push, PR, workflow_dispatch)
+      - name: Notify Discord with Vercel report URL
+        if: always()
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          TEST_STATUS: ${{ steps.newman.outcome }}
+          VERCEL_URL: ${{ steps.vercel.outputs.preview-url }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          GITHUB_REF: ${{ github.ref }}
+          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          # Build a nice label for what triggered this run
+          case "$GITHUB_EVENT_NAME" in
+            push)
+              EVENT_LABEL="push ($GITHUB_REF)"
+              ;;
+            pull_request)
+              EVENT_LABEL="pull_request ($GITHUB_REF)"
+              ;;
+            workflow_dispatch)
+              EVENT_LABEL="workflow_dispatch"
+              ;;
+            *)
+              EVENT_LABEL="$GITHUB_EVENT_NAME ($GITHUB_REF)"
+              ;;
+          esac
+
+          # Vercel URL only exists for push to main; otherwise this will be empty
+          if [ -z "$VERCEL_URL" ]; then
+            VERCEL_MSG="(No Vercel deployment for this run)"
+          else
+            VERCEL_MSG="$VERCEL_URL"
+          fi
+
+          payload=$(cat <<EOF
+          {
+            "content": "API Automation run finished with status: **$TEST_STATUS**\nEvent: **$EVENT_LABEL**\nGitHub Run: $RUN_URL\nVercel HTML report: $VERCEL_MSG"
+          }
+          EOF
+          )
+
+          curl -X POST -H "Content-Type: application/json" -d "$payload" "$DISCORD_WEBHOOK_URL"
