@@ -1,0 +1,27 @@
+{
+  "id": "2klips-env-001",
+  "name": "hotstone-api-env",
+  "values": [
+    {
+      "key": "base_url",
+      "value": "https://api.2klips.com",
+      "type": "text",
+      "enabled": true
+    },
+    {
+      "key": "authorization_token",
+      "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1OCIsInBob25lIjoiKzk3Nzk4MDc1OTIxNTIiLCJyb2xlIjoiQWRtaW4iLCJ0b2tlbklkZW50aWZpZXIiOiJkZWMyYmIzMC03Y2Q1LTQxZWQtOGQ0Mi0wYmU2YTc3YzRlOGMiLCJpYXQiOjE3NjMzNTMxNjIsImV4cCI6MTc2MzM1NDA2Mn0.VSBLMUp80HnTwJNXX211rFnYn3mbbqf105bcc3BQt8Q",
+      "type": "text",
+      "enabled": true
+    },
+    {
+      "key": "refresh_token",
+      "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1OCIsInBob25lIjoiKzk3Nzk4MDc1OTIxNTIiLCJyb2xlIjoiQWRtaW4iLCJ0b2tlbklkZW50aWZpZXIiOiJkZWMyYmIzMC03Y2Q1LTQxZWQtOGQ0Mi0wYmU2YTc3YzRlOGMiLCJpYXQiOjE3NjMzNTMxNjIsImV4cCI6MTc2Mzk1Nzk2Mn0.CsfhqLMfz7ZkiNcjpfE1x7hXAltTnLDMvFt5_tC6-2E",
+      "type": "text",
+      "enabled": true
+    }
+  ],
+  "_postman_variable_scope": "environment",
+  "_postman_exported_at": "2025-11-17T11:00:00.000Z",
+  "_postman_exported_using": "Postman/10.0.0"
+}
